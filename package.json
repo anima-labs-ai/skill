@@ -1,0 +1,14 @@
+{
+  "name": "@anima-labs/skill",
+  "version": "0.1.0",
+  "description": "Claude Code skill for Anima — AI agent identity and communication platform",
+  "keywords": ["anima", "claude-code", "skill", "mcp", "ai-agents"],
+  "license": "MIT",
+  "author": "Anima Labs <support@anima.email>",
+  "homepage": "https://github.com/anima-labs-ai/skill",
+  "files": ["SKILL.md", "README.md", "templates/"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anima-labs-ai/skill"
+  }
+}

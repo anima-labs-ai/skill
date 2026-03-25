@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "anima": {
+      "command": "bun",
+      "args": ["run", "/path/to/packages/mcp/src/index.ts"],
+      "env": {
+        "ANIMA_API_URL": "http://127.0.0.1:3100",
+        "ANIMA_API_KEY": "ak_your_agent_key",
+        "ANIMA_MASTER_KEY": "mk_your_master_key"
+      }
+    }
+  }
+}
