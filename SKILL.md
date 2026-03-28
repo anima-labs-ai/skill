@@ -1,6 +1,6 @@
 # Anima MCP + CLI Skill
 
-Production skill for Claude Code and compatible assistants to operate Anima end-to-end: identity, email, phone/SMS, cards, vault, webhooks, security, browser checkout automation, and x402 fetches.
+Production skill for Claude Code and compatible assistants to operate Anima end-to-end: identity, email, phone/SMS, cards, vault, addresses, webhooks, security, browser checkout automation, and x402 fetches.
 
 ## Quick Start
 
@@ -311,6 +311,17 @@ Master Key column indicates whether privileged key access is required.
 |---|---|---|
 | `x402_fetch` | Fetch x402-protected URL with settlement flow. | ❌ |
 
+### Address (6)
+
+| Tool | Description | Master Key |
+|---|---|---|
+| `create_address` | Create a billing, shipping, mailing, or registered address for an agent. | ❌ |
+| `list_addresses` | List all addresses for an agent, optionally filtered by type. | ❌ |
+| `get_address` | Get a specific address by ID. | ❌ |
+| `update_address` | Update an existing address. | ❌ |
+| `delete_address` | Delete an address. | ❌ |
+| `validate_address` | Validate and standardize an address via USPS/provider. | ❌ |
+
 ## CLI Reference
 
 Package: `@anima-labs/cli`  
@@ -400,7 +411,16 @@ am extension status
 3. Execute: `browser_pay_checkout`.
 4. Audit card activity with `get_transactions`.
 
-### 9) x402 protected fetches
+### 9) Address management for purchasing agents
+
+1. Create billing address: `create_address` with type `BILLING`.
+2. Create shipping address: `create_address` with type `SHIPPING`.
+3. Validate: `validate_address` — standardizes via USPS/provider.
+4. Card creation auto-populates billing address from agent's primary.
+5. Browser checkout auto-fills shipping from `browser_fill_address`.
+6. List all addresses: `list_addresses`.
+
+### 10) x402 protected fetches
 
 1. Call `x402_fetch` with URL.
 2. Set `budget_limit_cents` for spend guardrails.
