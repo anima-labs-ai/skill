@@ -33,7 +33,7 @@ describe("@anima-labs/skill package metadata", () => {
     expect(pkg.files).toContain("README.md");
     expect(pkg.files).toContain("templates/");
     expect(pkg.license).toBe("MIT");
-    expect(pkg.author).toBe("Anima Labs <support@anima.email>");
+    expect(pkg.author).toBe("Anima Labs <support@useanima.sh>");
     expect(pkg.homepage).toBe("https://github.com/anima-labs-ai/skill");
     expect(pkg.repository?.url).toBe("https://github.com/anima-labs-ai/skill");
   });
