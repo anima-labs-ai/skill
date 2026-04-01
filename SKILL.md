@@ -23,7 +23,7 @@ Anima has four cooperating surfaces:
 
 1. API (`apps/api`) is the source of truth for organizations, agents, messaging, cards, vault, and policy.
 2. MCP server (`@anima-labs/mcp`, entry: `packages/mcp/src/index.ts`) exposes tools/resources to AI clients.
-3. CLI (`@anima-labs/cli`, binaries `am` and `anima`) handles auth, setup, and operator workflows.
+3. CLI (`@anima-labs/cli`, binary `anima`) handles auth, setup, and operator workflows.
 4. Extension integration enables browser checkout tools via MCP (`browser_*`).
 
 Runtime flow:
@@ -344,18 +344,18 @@ Command groups:
 Core examples:
 
 ```bash
-am auth login --api-key ak_xxx
-am identity create --name worker-1
-am email send --to ops@example.com --subject "Hello" --text "Hi"
-am setup-mcp install --all
-am extension status
+anima auth login --api-key ak_xxx
+anima identity create --name worker-1
+anima email send --to ops@example.com --subject "Hello" --text "Hi"
+anima setup-mcp install --all
+anima extension status
 ```
 
 ## Workflow Recipes
 
 ### 1) New agent identity (auth → create agent → provision email)
 
-1. `am auth login --api-key ak_xxx`
+1. `anima auth login --api-key ak_xxx`
 2. Call `agent_create` with name + metadata.
 3. Validate with `agent_get`.
 4. Verify sender with `whoami` and `anima://agent-info`.
