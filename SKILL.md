@@ -30,7 +30,16 @@ user-invocable: true
 
 Anima gives an autonomous agent a verified identity (email, phone, voice, card, vault, addresses, W3C DID) and the tools to act on it. Agents can sign up for SaaS, receive OTPs, take calls, pay for things, and store secrets — all gated by a unified policy engine.
 
-> **Note (May 2026):** the spend-request lifecycle (`anima card spend-request *`), the MPP/SPT commands (`anima mpp pay`, `anima mpp decode`), and OAuth Connect (`connect.useanima.sh`) ship in **Wave 3** of the May 2026 release. They are documented here as the canonical agent-facing contract, but the CLI commands return "coming soon" until 3A-3M land. Track release: `anima auth whoami --human` will show CLI version; v0.6.0+ has Wave 3.
+> **Note (May 2026):** Wave 3 shipped on 2026-05-05.
+>
+> - **`anima card spend-request *`** — fully implemented (create / retrieve / request-approval / update / list)
+> - **`anima mpp decode`** — fully implemented (parses WWW-Authenticate Payment challenges)
+> - **`anima mpp pay`** — contract-stable; server returns 501 with workaround until the SPT settlement loop ships
+> - **`/approve/[token]`** consent surface — fully implemented at `approve.useanima.sh`; WebAuthn step-up renders but returns NOT_IMPLEMENTED until the WebAuthn challenge store ships (cardholder uses the console fallback for high-value approvals)
+> - **`/oauth/authorize`** consent surface — fully implemented at `useanima.sh/oauth/authorize`; the `/oauth/token` exchange + scope-enforcement middleware ship in Wave 3J.2
+> - **MCP tools** — `spend_request_*` (5 tools) + `mpp_pay` + `mpp_decode` registered, total tool count 197.
+>
+> Track release: `anima auth whoami --human` shows CLI version; v0.6.0+ has Wave 3.
 
 ## Choosing how to call Anima
 
