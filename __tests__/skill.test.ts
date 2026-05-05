@@ -40,19 +40,24 @@ describe("@anima-labs/skill package metadata", () => {
 });
 
 describe("SKILL.md content coverage", () => {
+  // SKILL.md was rewritten 2026-05-05 in the Stripe link-cli style: agent-facing
+  // trigger phrases in frontmatter, MCP-first instruction with CLI fallback,
+  // step-by-step core flow checklists, error-recovery matrix. The old section
+  // headings (Quick Start / Architecture / etc) were intentionally replaced
+  // with a flow-oriented structure. These tests validate the new shape.
   it("exists and includes required major sections", () => {
     expect(existsSync(skillPath)).toBe(true);
     const skill = readText(skillPath);
 
     const requiredSections = [
-      "## Quick Start",
-      "## Architecture Overview",
-      "## MCP Server Setup",
-      "## Complete Tool Reference",
-      "## CLI Reference",
-      "## Workflow Recipes",
-      "## Troubleshooting",
-      "## Best Practices",
+      "# Anima",
+      "## Choosing how to call Anima",
+      "## Output format",
+      "## Running commands",
+      "## Core flow",
+      "## Important",
+      "## Errors",
+      "## Further docs",
     ];
 
     for (const section of requiredSections) {
@@ -60,27 +65,50 @@ describe("SKILL.md content coverage", () => {
     }
   });
 
-  it("mentions all 13 MCP tool domains", () => {
+  it("mentions every channel + payment surface in the unified-identity wedge", () => {
     const skill = readText(skillPath);
-    const domains = [
-      "Organization",
-      "Agent",
-      "Email",
-      "Domain",
-      "Phone",
-      "Message",
-      "Cards",
-      "Vault",
-      "Webhook",
-      "Security",
-      "Utility",
-      "Browser Payments",
+    const surfaces = [
+      "email",
+      "phone",
+      "voice",
+      "vault",
+      "card",
+      "address",
+      "webhook",
       "x402",
+      "mpp",
+      "spend-request",
+      "passkey",
+      "MCP",
     ];
 
-    for (const domain of domains) {
-      expect(skill.toLowerCase().includes(domain.toLowerCase())).toBe(true);
+    for (const surface of surfaces) {
+      expect(skill.toLowerCase().includes(surface.toLowerCase())).toBe(true);
     }
+  });
+
+  it("includes the MCP-first preference statement (mirrors Stripe link-cli)", () => {
+    const skill = readText(skillPath);
+    expect(skill.toLowerCase()).toContain("mcp server");
+    expect(skill.toLowerCase()).toContain("fall back to the cli");
+  });
+
+  it("documents the spend-request lifecycle agents follow", () => {
+    const skill = readText(skillPath).toLowerCase();
+    // Each lifecycle state must be referenced (case-insensitive — the doc
+    // uses lowercase 'pending_approval' inline, the API contract uses
+    // 'PENDING_APPROVAL' enum values; both are valid).
+    for (const state of ["created", "pending_approval", "approved", "denied", "expired"]) {
+      expect(skill.includes(state)).toBe(true);
+    }
+  });
+
+  it("calls out the step-up threshold and 5-minute approval TTL", () => {
+    const skill = readText(skillPath);
+    // The cardholder approval flow has two key constants — both must be
+    // documented so agents and humans align on expectations.
+    expect(skill).toMatch(/\$200|step.up/i);
+    expect(skill).toMatch(/5.minute|five.minute|5.min|5min/i);
   });
 });
 
