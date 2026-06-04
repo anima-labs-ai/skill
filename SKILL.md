@@ -1,7 +1,7 @@
 ---
 name: anima
 description: |
-  Gives an AI agent a full identity — email inbox, phone number, voice, encrypted vault, addresses, DID — and the tools to use them. Use when the user says "create an agent", "give my agent email", "send email as agent", "fetch with x402", "store a secret in the vault", "set up a phone number", or asks to spin up identity for an autonomous workflow. Use when the user asks to install or connect Anima.
+  Gives an AI agent a full identity — email inbox, phone number, SMS, voice, encrypted vault, addresses, DID — and the tools to use them. Use when the user says "create an agent", "give my agent email", "text me now", "call me now", "send email as agent", "fetch with x402", "store a secret in the vault", "set up a phone number", or asks to spin up identity for an autonomous workflow. Use when the user asks to install or connect Anima.
 allowed-tools:
   - Bash(anima:*)
   - Bash(am:*)
@@ -48,22 +48,26 @@ Anima ships an **MCP server** and a **standalone CLI**. Always prefer the MCP se
 
 The rest of this document shows CLI commands. When using the MCP server, map each command to its corresponding MCP tool — the parameters and behaviour are identical.
 
-| CLI command | MCP tool |
+| CLI command | Preferred MCP tool |
 |---|---|
-| `anima auth login` | `mcp__anima__auth_login` |
-| `anima auth whoami` | `mcp__anima__whoami` |
-| `anima identity create` | `mcp__anima__agent_create` |
-| `anima email send` | `mcp__anima__email_send` |
-| `anima email list` | `mcp__anima__email_list` |
-| `anima phone provision` | `mcp__anima__phone_provision` |
-| `anima phone send-sms` | `mcp__anima__phone_send_sms` |
-| `anima vault store` | `mcp__anima__vault_create_credential` |
-| `anima vault get` | `mcp__anima__vault_get_credential` |
-| `anima vault totp` | `mcp__anima__vault_get_totp` |
-| `anima x402 fetch` | `mcp__anima__x402_fetch` |
-| `anima mpp pay` | `mcp__anima__mpp_pay` |
-| `anima mpp decode` | `mcp__anima__mpp_decode` |
-| `anima webhook create` | `mcp__anima__webhook_create` |
+| `anima auth login` | `auth_login` or `whoami`-guided auth flow |
+| `anima auth whoami` | `workspace_status` / `whoami` |
+| `anima identity create` | `agent_create` |
+| `anima email send` | `email_send` |
+| `anima email list` | `email_list` |
+| `anima phone provision` | `phone_number_provision` |
+| `anima phone list` | `phone_number_list` |
+| `anima phone send-sms` | `sms_send` |
+| `anima voice place` | `phone_call_create` or live `phone_call` |
+| `anima voice transcript` | `phone_call_transcript_get` |
+| `anima vault provision` | `vault_provision` |
+| `anima vault store` | `vault_credential_create` |
+| `anima vault get` | `vault_credential_get` |
+| `anima vault totp` | `vault_credential_get_totp` |
+| `anima x402 fetch` | `x402_fetch` |
+| `anima mpp pay` | `mpp_pay` |
+| `anima mpp decode` | `mpp_decode` |
+| `anima webhook create` | `webhook_set` |
 
 ## Output format — agent vs human
 
@@ -100,38 +104,55 @@ anima mpp decode --challenge '<full-header>'
 
 This validates the challenge, decodes the request payload, and returns the extracted `network_id` and decoded request JSON.
 
-## Core flow — give the agent its own email/phone
+## Core flow — prove the agent identity is live
+
+Use this when the user asks for a real agent identity, a phone number, "text me now", or "call me now". The fastest proof path is email first, then SMS, then voice if the current plan and consent posture allow it.
 
 ```bash
-# Create the agent identity
-anima identity create --name "<agent-name>" --display-name "<Display Name>"
+# Create the agent identity.
+anima identity create --org <org-id> --name "<Display Name>" --slug "<agent-slug>"
 
-# Send email
-anima email send --from <agent>@<domain> --to user@example.com --subject "Hello" --text "Hi"
+# Send email from the agent.
+anima email send --agent <agent-id> --to user@example.com \
+  --subject "Hello from my agent" \
+  --body "I now have my own Anima email identity."
 
-# Provision phone
-anima phone provision --area-code 415
+# Provision an SMS + voice capable phone number.
+anima phone provision --agent <agent-id> --area-code 415 --capabilities sms,voice
 
-# Send SMS
-anima phone send-sms --to +14155550100 --text "Verification code: 123456"
+# Text the human from the agent's number.
+anima phone send-sms --agent <agent-id> --to +14155550100 \
+  --body "Hi - this is my Anima agent texting from its own number."
+
+# If voice is enabled and the recipient consented, place the first call.
+anima voice place --agent <agent-id> --to +14155550100 \
+  --tier basic \
+  --greeting "Hi, this is my Anima agent calling from its own number." \
+  --consent-source customer-initiated
+
+# After the call ends, fetch the transcript.
+anima voice transcript <call-id>
 ```
 
-For inbound, register a webhook so the agent reacts to incoming messages:
+For inbound, register a webhook so the agent reacts to incoming email, SMS, and call lifecycle events:
 
 ```bash
 anima webhook create --url https://your-app.example.com/webhooks/anima \
-  --events email.received,sms.received
+  --events message.received,phone.provisioned,call.ended
 ```
+
+If the user says "call me now", first confirm the destination number and consent source. Use `customer-initiated` only when the human explicitly requested the call in the current workflow. Otherwise ask for the consent basis before dialing.
 
 ## Core flow — secrets in the vault
 
-The vault keeps long-lived credentials out of the LLM context window. Tokens are injected at egress via 60-second ephemeral handles — the LLM only ever sees the handle, never the secret.
+The vault keeps long-lived credentials out of the LLM context window. Use it when the agent needs to sign in, call an external API, or preserve a token across runs. Tokens are injected at egress via 60-second ephemeral handles — the LLM only ever sees the handle, never the secret.
 
 ```bash
-anima vault provision
-anima vault store --label openai_api_key --value "sk-..."
-anima vault get --label openai_api_key       # returns ephemeral handle
-anima vault totp --label "GitHub Auth"        # returns 6-digit code
+anima vault provision --agent <agent-id>
+anima vault store --agent <agent-id> --type login --name github \
+  --username "<username>" --password "<password>" --uri https://github.com
+anima vault get <credential-id> --agent <agent-id>       # masked by default
+anima vault totp <credential-id> --agent <agent-id>      # returns 6-digit code
 ```
 
 ## Important
