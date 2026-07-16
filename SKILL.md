@@ -1,7 +1,7 @@
 ---
 name: anima
 description: |
-  Gives an AI agent a full identity — email inbox, phone number, SMS, voice, encrypted vault, addresses, DID — and the tools to use them. Use when the user says "create an agent", "give my agent email", "text me now", "call me now", "send email as agent", "fetch with x402", "store a secret in the vault", "set up a phone number", or asks to spin up identity for an autonomous workflow. Use when the user asks to install or connect Anima.
+  Gives an AI agent a full identity — email inbox, phone number, SMS, voice, encrypted vault, addresses, DID — and the tools to use them. Use when the user says "create an agent", "give my agent email", "text me now", "call me now", "send email as agent", "store a secret in the vault", "set up a phone number", or asks to spin up identity for an autonomous workflow. Use when the user asks to install or connect Anima.
 allowed-tools:
   - Bash(anima:*)
   - Bash(am:*)
@@ -10,7 +10,7 @@ allowed-tools:
   - Bash(npm:*)
   - Bash(bun:*)
 license: Complete terms in LICENSE
-version: 0.5.0
+version: 0.6.0
 metadata:
   author: anima-labs
   url: https://useanima.sh/agents
@@ -30,43 +30,31 @@ user-invocable: true
 
 Anima gives an autonomous agent a verified identity (email, phone, voice, vault, addresses, W3C DID) and the tools to act on it. Agents can sign up for SaaS, receive OTPs, take calls, and store secrets — all gated by a unified policy engine.
 
-> **Note (May 2026):** Wave 3 shipped on 2026-05-05.
->
-> - **`anima mpp decode`** — fully implemented (parses WWW-Authenticate Payment challenges)
-> - **`anima mpp pay`** — contract-stable; server returns 501 with workaround until the SPT settlement loop ships
-> - **`/oauth/authorize`** consent surface — fully implemented at `useanima.sh/oauth/authorize`; the `/oauth/token` exchange + scope-enforcement middleware ship in Wave 3J.2
-> - **MCP tools** — `mpp_pay` + `mpp_decode` registered.
->
-> Track release: `anima auth whoami --human` shows CLI version; v0.6.0+ has Wave 3.
-
 ## Choosing how to call Anima
 
 Anima ships an **MCP server** and a **standalone CLI**. Always prefer the MCP server when available — it avoids shell-parsing edge cases and is the intended integration path.
 
-1. **Check for the MCP server first.** Look for an `anima` MCP server in your active MCP connections. If present, call its tools directly (e.g. `whoami`, `agent_create`, `email_send`, `x402_fetch`).
+1. **Check for the MCP server first.** Look for an `anima` MCP server in your active MCP connections. If present, call its tools directly (e.g. `account_overview`, `agent_create`, `email_send`).
 2. **Fall back to the CLI** only if the MCP server is not available. Install it with `npm install -g @anima-labs/cli`, then use the shell commands documented below.
 
 The rest of this document shows CLI commands. When using the MCP server, map each command to its corresponding MCP tool — the parameters and behaviour are identical.
 
 | CLI command | Preferred MCP tool |
 |---|---|
-| `anima auth login` | `auth_login` or `whoami`-guided auth flow |
-| `anima auth whoami` | `workspace_status` / `whoami` |
+| `anima auth login` | (CLI-only — MCP clients authenticate with `ANIMA_API_KEY` / a Bearer key, no login tool) |
+| `anima auth whoami` | `account_overview` |
 | `anima identity create` | `agent_create` |
 | `anima email send` | `email_send` |
 | `anima email list` | `email_list` |
 | `anima phone provision` | `phone_number_provision` |
 | `anima phone list` | `phone_number_list` |
 | `anima phone send-sms` | `sms_send` |
-| `anima voice place` | `phone_call_create` or live `phone_call` |
+| `anima voice place` | `phone_call_create` |
 | `anima voice transcript` | `phone_call_transcript_get` |
 | `anima vault provision` | `vault_provision` |
 | `anima vault store` | `vault_credential_create` |
 | `anima vault get` | `vault_credential_get` |
 | `anima vault totp` | `vault_credential_get_totp` |
-| `anima x402 fetch` | `x402_fetch` |
-| `anima mpp pay` | `mpp_pay` |
-| `anima mpp decode` | `mpp_decode` |
 | `anima webhook create` | `webhook_set` |
 
 ## Output format — agent vs human
@@ -84,25 +72,9 @@ All commands accept `--format json|yaml|jsonl|md` for machine-readable output. P
 Agent-facing JSON contract:
 
 - `auth login`: first object contains `verification_url` and `phrase`; final object contains the authentication result after the user approves
-- `whoami`: returns identity payload with optional `update` field if a newer CLI version is available
+- `anima auth whoami`: returns identity payload with optional `update` field if a newer CLI version is available
 
 For `auth login`, keep reading stdout until the process exits. The user MUST visit the verification URL to continue. **Always show the full URL in clear text.**
-
-## Core flow — pay for an API with x402
-
-```bash
-anima x402 fetch <url> --budget-limit-cents 500
-```
-
-Returns `paid`, `settlement`, and the response body. Pass `--sandbox` for dry-run.
-
-For 402 responses with `WWW-Authenticate: Payment` challenges:
-
-```bash
-anima mpp decode --challenge '<full-header>'
-```
-
-This validates the challenge, decodes the request payload, and returns the extracted `network_id` and decoded request JSON.
 
 ## Core flow — prove the agent identity is live
 
@@ -178,7 +150,6 @@ All errors are output as JSON with `code` and `message` fields, exit code 1.
 - Anima skill manifest: https://useanima.sh/skill.md
 - Anima `agents.txt`: https://useanima.sh/agent.txt
 - Anima `llms.txt`: https://useanima.sh/llms.txt
-- MPP/x402 protocol: https://docs.useanima.sh/protocols/mpp, https://docs.useanima.sh/protocols/x402
 - Console: https://console.useanima.sh
 - OAuth consent: https://connect.useanima.sh
 - Support / questions: https://discord.gg/pY3GK59Z9E
