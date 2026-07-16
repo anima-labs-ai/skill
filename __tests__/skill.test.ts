@@ -67,21 +67,50 @@ describe("SKILL.md content coverage", () => {
 
   it("mentions every channel surface in the unified-identity wedge", () => {
     const skill = readText(skillPath);
-    const surfaces = [
-      "email",
-      "phone",
-      "voice",
-      "vault",
-      "address",
-      "webhook",
-      "x402",
-      "mpp",
-      "MCP",
-    ];
+    const surfaces = ["email", "phone", "voice", "vault", "address", "webhook", "MCP"];
 
     for (const surface of surfaces) {
       expect(skill.toLowerCase().includes(surface.toLowerCase())).toBe(true);
     }
+  });
+
+  it("steers only to MCP tools that actually exist (no phantom tools)", () => {
+    // Competitive-parity spec E4: SKILL.md steered agents to x402_fetch,
+    // mpp_pay, mpp_decode, auth_login, workspace_status, whoami — none of
+    // which exist on either Anima MCP server. x402/MPP is excluded scope
+    // (removed, not built), so the manifest must not resurrect any of them.
+    const skill = readText(skillPath);
+    const phantoms = [
+      "x402_fetch",
+      "mpp_pay",
+      "mpp_decode",
+      "auth_login",
+      "workspace_status",
+      "x402",
+      "mpp",
+    ];
+
+    for (const phantom of phantoms) {
+      expect(skill.toLowerCase().includes(phantom.toLowerCase())).toBe(false);
+    }
+    // `whoami` may only appear as the CLI command `anima auth whoami`,
+    // never as a bare MCP tool reference.
+    expect(skill.includes("`whoami`")).toBe(false);
+  });
+
+  it("templates point at published surfaces, not monorepo-local paths", () => {
+    const claudeDesktop = readText(join(templatesDir, "claude-desktop.json"));
+    const cursor = readText(join(templatesDir, "cursor-mcp.json"));
+    const env = readText(join(templatesDir, "env.example"));
+
+    // Old templates ran `bun run /path/to/packages/mcp/src/index.ts` against
+    // http://127.0.0.1:3100 — unusable outside the monorepo dev machine.
+    for (const content of [claudeDesktop, cursor, env]) {
+      expect(content.includes("/path/to/packages")).toBe(false);
+      expect(content.includes("127.0.0.1:3100")).toBe(false);
+    }
+    expect(claudeDesktop.includes("@anima-labs/mcp")).toBe(true);
+    expect(cursor.includes("https://mcp.useanima.sh/mcp")).toBe(true);
   });
 
   it("includes the MCP-first preference statement (mirrors Stripe link-cli)", () => {
