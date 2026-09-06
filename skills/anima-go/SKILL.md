@@ -36,35 +36,34 @@ Requires Go 1.22 or later.
 package main
 
 import (
-    "context"
-    "log"
-    "os"
+	"context"
+	"os"
 
-    anima "github.com/anima-labs-ai/go"
+	anima "github.com/anima-labs-ai/go"
 )
 
 func main() {
-    client := anima.NewClient(os.Getenv("ANIMA_API_KEY")) // never hardcode
-    ctx := context.Background()
-    _ = client
-    _ = ctx
-    _ = log.Println
+	client := anima.NewClient(os.Getenv("ANIMA_API_KEY")) // never hardcode
+	ctx := context.Background()
+	_ = client
+	_ = ctx
 }
 ```
 
 An agent key (`ak_…`) scopes to one identity; a master key (`mk_…`) administers
-the org.
+the org. Services hang off the client: `client.Agents`, `client.Messages`,
+`client.Emails`, `client.Phones`, `client.Vault`, `client.Webhooks`.
 
 ## Create an identity
 
 ```go
 agent, err := client.Agents.Create(ctx, anima.CreateAgentParams{
-    OrgID: os.Getenv("ANIMA_ORG_ID"),
-    Name:  "Support Bot",
-    Slug:  "support-bot",
+	OrgID: os.Getenv("ANIMA_ORG_ID"),
+	Name:  "Support Bot",
+	Slug:  "support-bot",
 })
 if err != nil {
-    return fmt.Errorf("create agent: %w", err)
+	return fmt.Errorf("create agent: %w", err)
 }
 ```
 
@@ -75,50 +74,95 @@ confusing downstream failures on send.
 
 ```go
 msg, err := client.Messages.SendEmail(ctx, anima.SendEmailParams{
-    AgentID: agent.ID,
-    To:      []string{"user@example.com"},
-    Subject: "Hello from my agent",
-    Body:    "I have my own inbox now.",
+	AgentID: agent.ID,
+	To:      []string{"user@example.com"},
+	Subject: "Hello from my agent",
+	Body:    "I have my own inbox now.",
 })
+
+page, err := client.Emails.List(ctx, &anima.EmailListParams{AgentID: agent.ID})
 ```
 
 Replies thread back to the agent that sent them rather than a shared human
-mailbox — which is what makes "which agent did this?" answerable later.
+mailbox — which is what makes "which agent did this?" answerable later. Pass
+`InReplyTo` to keep a reply in its thread.
+
+Large result sets have an auto-paging form so you do not hand-roll cursors:
+
+```go
+it := client.Emails.ListAutoPaging(&anima.EmailListParams{AgentID: agent.ID})
+for it.Next(ctx) {
+	m := it.Current()
+	_ = m
+}
+if err := it.Err(); err != nil {
+	return err
+}
+```
 
 ## Phone — SMS and voice
 
 ```go
-number, err := client.Phone.Provision(ctx, anima.ProvisionNumberParams{
-    AgentID: agent.ID,
-    Country: "US",
+number, err := client.Phones.Provision(ctx, anima.ProvisionPhoneParams{
+	AgentID:     agent.ID,
+	CountryCode: "US",
 })
 
-_, err = client.Phone.SendSMS(ctx, anima.SendSMSParams{
-    AgentID: agent.ID,
-    To:      "+15551234567",
-    Body:    "Agent here.",
+_, err = client.Messages.SendSMS(ctx, anima.SendSMSParams{
+	AgentID: agent.ID,
+	To:      "+15551234567",
+	Body:    "Agent here.",
 })
 ```
 
-Numbers send and receive SMS and voice. They are geographic US lines, so do not
-promise they clear third-party signup gates that check line type.
+SMS goes through `client.Messages`, not `client.Phones` — the phone service
+provisions and manages numbers, the message service sends. Numbers send and
+receive SMS and voice. They are geographic US lines, so do not promise they
+clear third-party signup gates that check line type.
 
 ## Vault — use a secret without reading it
 
-The credential is injected at the point of use. It never enters the model's
-context, your logs, or a trace.
+```go
+_, err = client.Vault.Provision(ctx, agent.ID)
+
+cred, err := client.Vault.CreateCredential(ctx, anima.CreateVaultCredentialParams{
+	AgentID: agent.ID,
+	Type:    anima.CredentialTypeLogin,
+	Name:    "acme-portal",
+	Login: &anima.VaultLoginData{
+		Username: "ops@example.com",
+		Password: os.Getenv("ACME_PASSWORD"),
+	},
+})
+```
+
+Stronger: have the vault generate the password so it never exists in your
+process, your environment, or the model's context. It is stored and never
+returned — the response carries only the masked credential.
 
 ```go
-_, err = client.Vault.Store(ctx, anima.StoreCredentialParams{
-    AgentID:  agent.ID,
-    Label:    "acme-portal",
-    Username: "ops@example.com",
-    Password: os.Getenv("ACME_PASSWORD"),
+cred, err := client.Vault.CreateCredential(ctx, anima.CreateVaultCredentialParams{
+	AgentID:          agent.ID,
+	Type:             anima.CredentialTypeLogin,
+	Name:             "acme-portal",
+	Login:            &anima.VaultLoginData{Username: "ops@example.com"},
+	GeneratePassword: &anima.GeneratePasswordParams{Length: 32},
 })
-
-// Metadata only — the secret is not returned to your process by default.
-cred, err := client.Vault.Get(ctx, agent.ID, "acme-portal")
 ```
+
+`GeneratePassword` is mutually exclusive with `Login.Password` — set one.
+
+Read back by **credential ID**, not by name:
+
+```go
+c, err := client.Vault.GetCredential(ctx, cred.ID)
+list, err := client.Vault.ListCredentials(ctx, anima.ListVaultCredentialsParams{
+	AgentID: agent.ID,
+})
+```
+
+Provisioning is owner-gated. If it is refused, ask through
+`client.ProvisioningRequests` rather than retrying.
 
 ## Context and timeouts
 
@@ -132,14 +176,15 @@ defer cancel()
 
 ## Errors
 
-Errors carry a code and HTTP status. Handle what you can act on; let the rest
+Errors unwrap to `*anima.APIError`, carrying `Status`, `Code`, `Message` and —
+on a 429 — `RetryAfter` in seconds. Handle what you can act on; let the rest
 surface:
 
 ```go
 var apiErr *anima.APIError
-if errors.As(err, &apiErr) && apiErr.Code == "PLAN_LIMIT" {
-    // upgrade or back off
+if errors.As(err, &apiErr) && apiErr.Code == "RATE_LIMIT" {
+	time.Sleep(time.Duration(apiErr.RetryAfter) * time.Second)
 }
 ```
 
-Free tier: 3 identities, no credit card. Docs: <https://docs.useanima.sh>
+Free tier: no credit card. Docs: <https://docs.useanima.sh>

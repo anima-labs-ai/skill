@@ -1,7 +1,7 @@
 ---
 name: anima-vault
 description: |
-  Let an AI agent log in and act using a credential it never sees — the Anima vault stores secrets encrypted and injects them at the point of use, so passwords and TOTP codes stay out of the model's context window, logs and traces. Use when the user says "my agent needs to log in", "store a password for my agent", "the agent needs 2FA", "don't put the API key in the prompt", "inject credentials", or asks how an agent can authenticate somewhere without being handed the secret.
+  Let an AI agent log in and act using a credential it never sees — the Anima vault stores secrets encrypted, brokers the outbound call server-side, and can generate a password nobody ever reads, so secrets stay out of the model's context window, argv, logs and traces. Use when the user says "my agent needs to log in", "store a password for my agent", "call an API without giving the agent the key", "don't put the API key in the prompt", "inject credentials", or asks how an agent can authenticate somewhere without being handed the secret.
 allowed-tools:
   - Bash(anima:*)
   - Bash(am:*)
@@ -15,65 +15,119 @@ user-invocable: true
 
 # Anima Vault — let an agent use a secret without reading it
 
-An agent that needs to log somewhere has two bad options and one good one.
+An agent that needs to log in somewhere has two bad options and one good one.
 
-**Paste the password into the prompt.** It is now in the context window, and in
+**Paste the secret into the prompt.** It is now in the context window, and in
 every log, trace and eval dataset that context touches. Rotating it later does
 not un-write those.
 
 **Have a human do the login.** Then it is not an autonomous agent, it is a
 form-filler with extra steps.
 
-**Or store it in the vault and let the agent use it.** The secret is encrypted
-at rest and injected at the point of use. The model never receives the value.
+**Or put it in the vault and let the agent *use* it.** The strongest mode never
+returns the plaintext to anyone — including the agent, and including you.
+
+## Provision once
+
+```bash
+anima vault provision --agent <agent-id>
+```
+
+Provisioning is owner-gated. If it is refused, ask rather than retry:
+
+```bash
+anima request vault --agent <agent-id> --reason "needs to log into the billing portal"
+```
+
+That is the design: the agent gets the outcome, the human keeps the authority.
 
 ## Store a credential
 
 ```bash
-anima vault provision --agent <agent-id>          # one-time, owner-approved
-
-anima vault store --agent <agent-id> \
-  --label "acme-portal" \
+printf '%s' "$ACME_PASSWORD" | anima vault store \
+  --agent <agent-id> \
+  --name "acme-portal" \
   --username "ops@example.com" \
-  --password "$ACME_PASSWORD"
+  --uri "https://portal.acme.com" \
+  --password-stdin
 ```
 
-Pass the secret from the environment, never as a literal — a shell literal ends
-up in history, and in whatever transcript the agent is writing.
+`--password-stdin` is the point: the secret arrives over stdin, so it never
+appears in `argv`, in shell history, or in the process list. There is
+deliberately no `--password` flag.
 
-## Use it
+Better still, let the vault invent it so no human or model ever knows it:
 
 ```bash
-anima vault list --agent <agent-id>               # labels and metadata only
-anima vault get --agent <agent-id> --label acme-portal
-anima vault totp --agent <agent-id> --label acme-portal
+anima vault store --agent <agent-id> --name "acme-portal" \
+  --username "ops@example.com" --generate-password --length 32
 ```
 
-`get` returns metadata by default. The point of the vault is that reading the
-raw value is the exception, not the workflow — prefer injection at use.
+## Use it without revealing it
 
-## Two-factor
-
-Store the TOTP seed alongside the credential and the agent can complete 2FA on
-its own:
+This is the part that makes an agent autonomous rather than a form-filler.
+`vault use` performs the HTTP call **server-side** with the credential attached,
+so the secret never reaches your process at all:
 
 ```bash
-anima vault store --agent <agent-id> --label acme-portal \
-  --username ops@example.com --password "$ACME_PASSWORD" --totp-secret "$ACME_TOTP"
-
-anima vault totp --agent <agent-id> --label acme-portal   # current 6-digit code
+anima vault use \
+  --credential <credential-id> \
+  --method POST \
+  --url https://api.acme.com/v1/orders \
+  --header "Content-Type: application/json" \
+  --body '{"sku":"A-1","qty":2}'
 ```
 
-## Ownership and approval
+The agent gets the response. It never gets the key.
 
-Vault provisioning is **owner-gated** — the human approves in the console, not
-the agent. If a call is refused with a precondition error, ask rather than retry:
+Two flags on `store` make that guarantee real rather than a convention:
+
+| Flag | Effect |
+|---|---|
+| `--reveal-policy brokered` | Plaintext is **never** returned to anyone — use-only |
+| `--allowed-host <host>` | The credential is brokered only to these hosts (api_key type) |
+
+Set together, a stolen agent key cannot exfiltrate the secret and cannot point
+it at an attacker's host:
 
 ```bash
-anima request vault --agent <agent-id>
+printf '%s' "$ACME_KEY" | anima vault store --agent <agent-id> \
+  --name "acme-api" --type api_key --provider acme --key-stdin \
+  --allowed-host api.acme.com \
+  --reveal-policy brokered
 ```
 
-That is the design: the agent gets the outcome, the human keeps the authority.
+`--allowed-host` is repeatable and **fail-closed**: an api_key credential with
+no allowed host is brokered nowhere at all.
+
+## Injecting into a subprocess
+
+When the tool you need to run only reads environment variables, resolve secrets
+into that process's environment and nothing wider:
+
+```bash
+anima vault exec --agent <agent-id> --dry-run   # show what would resolve
+anima vault exec --agent <agent-id> -- ./deploy.sh
+```
+
+`--dry-run` first. It prints which references resolve without running anything.
+
+Related: `vault inject` substitutes `{{vault:...}}` references in stdin,
+`vault redact` replaces known secret values in stdin with `[REDACTED]` (useful
+before writing a transcript), and `vault audit <paths...>` scans files for
+plaintext secrets you left behind.
+
+## Reading, when you genuinely must
+
+```bash
+anima vault list --agent <agent-id>          # names and metadata, no secrets
+anima vault get <credential-id> --agent <agent-id>
+anima vault totp <credential-id>             # current 6-digit 2FA code
+```
+
+`get` and `totp` take the **credential ID as a positional argument** — get it
+from `vault list`. Reading the raw value is the exception, not the workflow;
+a credential stored `--reveal-policy brokered` will refuse.
 
 ## What this is not
 
@@ -88,5 +142,4 @@ Every vault use carries a correlation ID back to the human who authorized it,
 alongside the agent's email, SMS and voice activity. When someone later asks
 "which agent logged into that portal, and who said it could?", the trail exists.
 
-Free tier includes 3 vaults and 10 credentials, no credit card.
-Docs: <https://docs.useanima.sh>
+Free tier includes the vault, no credit card. Docs: <https://docs.useanima.sh>
