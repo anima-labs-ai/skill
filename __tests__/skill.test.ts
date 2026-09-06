@@ -161,7 +161,16 @@ describe("template files", () => {
  * drifting apart.
  */
 const skillsDir = join(pkgDir, "skills");
-const EXPECTED_SKILLS = ["anima", "anima-cli", "anima-python", "anima-ts"];
+const EXPECTED_SKILLS = [
+  "anima",
+  "anima-cli",
+  "anima-go",
+  "anima-mcp",
+  "anima-onboarding",
+  "anima-python",
+  "anima-ts",
+  "anima-vault",
+];
 
 describe("skills/ directory layout (skills.sh discoverability)", () => {
   it("exposes every skill at skills/<name>/SKILL.md", () => {
