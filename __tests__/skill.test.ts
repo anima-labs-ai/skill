@@ -149,3 +149,61 @@ describe("template files", () => {
     expect(entries).toContain("env.example");
   });
 });
+
+/**
+ * skills.sh indexes a repository by crawling `skills/<name>/SKILL.md`. A single
+ * SKILL.md at the repo root -- which is how this package shipped until now -- is
+ * invisible to it, which is why Anima returned no results for its own category
+ * while competitors held three of the top four slots.
+ *
+ * The root SKILL.md stays canonical because package.json ships it, so
+ * skills/anima/SKILL.md is a mirror and these tests are what stop the two
+ * drifting apart.
+ */
+const skillsDir = join(pkgDir, "skills");
+const EXPECTED_SKILLS = ["anima", "anima-cli", "anima-python", "anima-ts"];
+
+describe("skills/ directory layout (skills.sh discoverability)", () => {
+  it("exposes every skill at skills/<name>/SKILL.md", () => {
+    expect(existsSync(skillsDir)).toBe(true);
+    const found = readdirSync(skillsDir)
+      .filter((d) => statSync(join(skillsDir, d)).isDirectory())
+      .sort();
+    expect(found).toEqual(EXPECTED_SKILLS);
+    for (const name of found) {
+      expect(existsSync(join(skillsDir, name, "SKILL.md"))).toBe(true);
+    }
+  });
+
+  it("keeps skills/anima/SKILL.md identical to the canonical root SKILL.md", () => {
+    // package.json ships the root file; the crawler reads the skills/ copy.
+    // If these diverge, published guidance and indexed guidance disagree and
+    // only one of them is ever tested.
+    expect(readText(join(skillsDir, "anima", "SKILL.md"))).toBe(readText(skillPath));
+  });
+
+  it("gives every skill frontmatter whose name matches its directory", () => {
+    // A mismatch here publishes under the wrong slug, which is the one error
+    // that cannot be corrected by editing content later.
+    for (const name of EXPECTED_SKILLS) {
+      const body = readText(join(skillsDir, name, "SKILL.md"));
+      expect(body.startsWith("---\n")).toBe(true);
+      const frontmatter = body.slice(4, body.indexOf("\n---", 4));
+      const declared = /^name:\s*(\S+)\s*$/m.exec(frontmatter)?.[1];
+      expect(declared).toBe(name);
+      expect(/^description:/m.test(frontmatter)).toBe(true);
+    }
+  });
+
+  it("does not promise the numbers clear third-party verification gates", () => {
+    // Anima's US numbers are geographic fixed-line via the carrier, so they
+    // send and receive SMS but are not guaranteed to pass a signup gate that
+    // checks line type. This claim was retracted across every public surface;
+    // these files must not reintroduce it.
+    for (const name of EXPECTED_SKILLS) {
+      const body = readText(join(skillsDir, name, "SKILL.md")).toLowerCase();
+      expect(body).not.toContain("receives sms verification codes");
+      expect(body).not.toContain("passes carrier verification");
+    }
+  });
+});
